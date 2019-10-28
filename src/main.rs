@@ -3,14 +3,11 @@ use luminance::context::GraphicsContext as _;
 use luminance::render_state::RenderState;
 use luminance::shader::program::Program;
 use luminance::tess::{Mode, TessBuilder};
-use luminance_derive::UniformInterface;
 use luminance_glfw::{Action, GlfwSurface, Key, Surface, WindowDim, WindowEvent, WindowOpt};
+use std::time::Instant;
 
 const VS: &'static str = include_str!("shader.vert.glsl");
 const FS: &'static str = include_str!("shader.frag.glsl");
-
-#[derive(UniformInterface)]
-struct ShaderInterface {}
 
 fn main() {
     let mut surface = GlfwSurface::new(
@@ -20,7 +17,7 @@ fn main() {
     )
     .expect("GLFW surface creation");
 
-    let program = Program::<(), (), ShaderInterface>::from_strings(None, VS, None, FS)
+    let program = Program::<(), (), ()>::from_strings(None, VS, None, FS)
         .expect("program creation")
         .ignore_warnings();
 
@@ -34,8 +31,18 @@ fn main() {
     let render_state =
         RenderState::default().set_blending((Equation::Additive, Factor::SrcAlpha, Factor::Zero));
 
+    let time_start = Instant::now();
+    let mut time_last = time_start;
+
     'app: loop {
         let mut resize = false;
+        let time_now = Instant::now();
+        let time_elapsed = (time_now - time_start).as_micros() as f64 / 1_000_000f64;
+        let time_delta = (time_now - time_last).as_micros() as f64 / 1_000_000f64;
+        time_last = time_now;
+
+        let fps = 1f64 / time_delta;
+        println!("FPS: {}", fps as i32);
 
         for event in surface.poll_events() {
             match event {
@@ -54,7 +61,17 @@ fn main() {
             &back_buffer,
             [0., 0., 0., 0.],
             |_pipeline, mut shd_gate| {
-                shd_gate.shade(&program, |_iface, mut rdr_gate| {
+                shd_gate.shade(&program, |iface, mut rdr_gate| {
+                    let query = iface.query();
+
+                    if let Ok(u_time) = query.ask("time") {
+                        u_time.update(time_elapsed as f32);
+                    }
+
+                    if let Ok(u_delta) = query.ask("delta") {
+                        u_delta.update(time_delta as f32);
+                    }
+
                     rdr_gate.render(render_state, |mut tess_gate| {
                         tess_gate.render(&tess);
                     });
