@@ -11,7 +11,7 @@ const FS: &'static str = include_str!("shader.frag.glsl");
 
 fn main() {
     let mut surface = GlfwSurface::new(
-        WindowDim::Windowed(1280, 720),
+        WindowDim::Windowed(720, 720),
         "Hello, world!",
         WindowOpt::default(),
     )
