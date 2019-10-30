@@ -19,8 +19,29 @@ mat3 view_matrix(vec3 eye,vec3 center,vec3 up){
   return mat3(s,u,-f);
 }
 
+float sdf_sphere(vec3 p,float r){
+  return length(p)-r;
+}
+
+float sdf_box(vec3 p,vec3 b){
+  vec3 q=abs(p)-b;
+  return length(max(q,0.))+min(max(q.x,max(q.y,q.z)),0.);
+}
+
+float sdf_floor(vec3 p,float h){
+  return p.z-h;
+}
+
+float sdf_ceil(vec3 p,float h){
+  return h-p.z;
+}
+
 float sdf_scene(vec3 sample_point){
-  return distance(sample_point,vec3(0))-1.;
+  float dist=1.;
+  dist=min(dist,sdf_ceil(sample_point,1.));
+  dist=min(dist,sdf_floor(sample_point,-1.));
+  dist=min(dist,sdf_box(sample_point,vec3(.5,.5,1.)));
+  return dist;
 }
 
 vec3 get_normal(vec3 pos){
@@ -56,10 +77,9 @@ void main(){
   vec3 transmit=vec3(1);
   vec3 light=vec3(0);
   float dist=shortest_distance_to_surface(pos,dir);
-  if(dist<0){
-    light+=transmit*(dir/2.+.5);
-  }else{
-    light+=reflect(dir,get_normal(pos+dir*dist))/2.+.5;
+  vec3 pos_hit=pos+dir*dist;
+  if(dist>0){
+    light+=sin(pos_hit);
   }
   
   frag=vec4(light,1);
