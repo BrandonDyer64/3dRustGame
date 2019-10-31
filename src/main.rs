@@ -1,13 +1,17 @@
 use luminance::blending::{Equation, Factor};
 use luminance::context::GraphicsContext as _;
+use luminance::framebuffer::Framebuffer;
+use luminance::pixel::{RGBA32F};
 use luminance::render_state::RenderState;
 use luminance::shader::program::Program;
 use luminance::tess::{Mode, TessBuilder};
+use luminance::texture::{Dim2, Flat};
 use luminance_glfw::{Action, GlfwSurface, Key, Surface, WindowDim, WindowEvent, WindowOpt};
 use std::time::Instant;
 
 const VS: &'static str = include_str!("shader.vert.glsl");
 const FS: &'static str = include_str!("shader.frag.glsl");
+const POST_FS: &'static str = include_str!("post.frag.glsl");
 
 fn main() {
     let mut surface = GlfwSurface::new(
@@ -21,6 +25,10 @@ fn main() {
         .expect("program creation")
         .ignore_warnings();
 
+    let post_program = Program::<(), (), ()>::from_strings(None, VS, None, POST_FS)
+        .expect("program creation")
+        .ignore_warnings();
+
     let tess = TessBuilder::new(&mut surface)
         .set_vertex_nb(4)
         .set_mode(Mode::TriangleFan)
@@ -28,13 +36,21 @@ fn main() {
         .unwrap();
 
     let mut back_buffer = surface.back_buffer().unwrap();
+    let size = surface.size();
+    let mut history_buffer_1 = Framebuffer::<Flat, Dim2, RGBA32F, ()>::new(&mut surface, size, 0)
+        .expect("framebuffer creation");
+    let mut history_buffer_2 = Framebuffer::<Flat, Dim2, RGBA32F, ()>::new(&mut surface, size, 0)
+        .expect("framebuffer creation");
     let render_state =
         RenderState::default().set_blending((Equation::Additive, Factor::SrcAlpha, Factor::Zero));
 
     let time_start = Instant::now();
     let mut time_last = time_start;
 
+    let mut frame_num = 0;
+
     'app: loop {
+        frame_num += 1;
         let mut resize = false;
         let time_now = Instant::now();
         let time_elapsed = (time_now - time_start).as_micros() as f64 / 1_000_000f64;
@@ -55,12 +71,27 @@ fn main() {
 
         if resize {
             back_buffer = surface.back_buffer().unwrap();
+            let size = surface.size();
+            history_buffer_1 =
+                Framebuffer::new(&mut surface, size, 0).expect("framebuffer recreation");
+            history_buffer_2 =
+                Framebuffer::new(&mut surface, size, 0).expect("framebuffer recreation");
         }
 
-        surface.pipeline_builder().pipeline(
-            &back_buffer,
+        let mut builder = surface.pipeline_builder();
+
+        let (front, back) = if frame_num % 2 == 0 {
+            (&history_buffer_1, &history_buffer_2)
+        } else {
+            (&history_buffer_2, &history_buffer_1)
+        };
+
+        builder.pipeline(
+            back,
             [0., 0., 0., 0.],
-            |_pipeline, mut shd_gate| {
+            |pipeline, mut shd_gate| {
+                let bound_texture = pipeline.bind_texture(front.color_slot());
+
                 shd_gate.shade(&program, |iface, mut rdr_gate| {
                     let query = iface.query();
 
@@ -72,12 +103,29 @@ fn main() {
                         u_delta.update(time_delta as f32);
                     }
 
+                    if let Ok(u_history) = query.ask("history") {
+                        u_history.update(&bound_texture);
+                    }
+
                     rdr_gate.render(render_state, |mut tess_gate| {
                         tess_gate.render(&tess);
                     });
                 });
             },
         );
+
+        builder.pipeline(&back_buffer, [0., 0., 0., 0.], |pipeline, mut shd_gate| {
+            let bound_texture = pipeline.bind_texture(back.color_slot());
+            shd_gate.shade(&post_program, |iface, mut rdr_gate| {
+                let query = iface.query();
+                if let Ok(u_frame) = query.ask("frame") {
+                    u_frame.update(&bound_texture);
+                }
+                rdr_gate.render(render_state, |mut tess_gate| {
+                    tess_gate.render(&tess);
+                })
+            })
+        });
 
         surface.swap_buffers();
     }

@@ -4,6 +4,8 @@ out vec4 frag;
 uniform float time;
 uniform float delta;
 
+uniform sampler2D history;
+
 #define STEPS 256
 #define EPSILON.001
 
@@ -77,7 +79,8 @@ vec3 get_normal(vec3 pos){
 
 void main(){
   vec3 view_dir=ray_dir(90.,vec2(1),v_uv);
-  vec3 pos=vec3(5.*sin(time),5.*cos(time),.0001);
+  // vec3 pos=vec3(5.*sin(time),5.*cos(time),.0001);
+  vec3 pos=vec3(5.,5.,.0001);
 
   mat3 view_to_world=view_matrix(pos,vec3(0),vec3(0.,0.,1.));
 
@@ -103,6 +106,8 @@ void main(){
       pos+=normal*EPSILON*3;
     }
   }
-  
-  frag=vec4(tcol,1);
+
+  vec3 hcol=texture(history, v_uv).rgb;
+
+  frag=vec4(mix(tcol,hcol,0.99),1);
 }
