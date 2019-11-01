@@ -4,6 +4,8 @@ out vec4 frag;
 uniform float time;
 uniform float delta;
 
+uniform vec2 iResolution;
+
 uniform vec3 cam_pos;
 uniform vec3 cam_dir;
 uniform vec3 cam_prev_pos;
@@ -11,8 +13,8 @@ uniform vec3 cam_prev_dir;
 
 uniform sampler2D history;
 
-#define STEPS 512
-#define EPSILON.01
+#define STEPS 256
+#define EPSILON.001
 
 float rand(vec2 co){
   return fract(sin(dot(co.xy,vec2(12.9898,78.233)))*43758.5453);
@@ -73,12 +75,13 @@ float sdf_ceil(vec3 p,float h){
 }
 
 float sdf_scene(vec3 sample_point){
+  vec3 p=vec3(mod(sample_point.xy,5.)-3.,sample_point.z);
   float dist=1.;
-  dist=min(dist,sdf_floor(sample_point,-1.));
-  dist=min(dist,sdf_ceil(sample_point,3.+EPSILON*2.));
-  dist=min(dist,sdf_box(sample_point,vec3(.5,.5,1.)));
-  dist=min(dist,sdf_sphere(sample_point+vec3(1,0,.5),.5));
-  dist=max(dist,-sdf_sphere(sample_point-cam_pos,.1));
+  dist=min(dist,sdf_floor(p,-1.));
+  dist=min(dist,sdf_ceil(p,4));
+  dist=min(dist,sdf_box(p,vec3(.5,.5,1.)));
+  dist=min(dist,sdf_sphere(p+vec3(1,0,.5),.5));
+  dist=max(dist,-sdf_sphere(sample_point-cam_pos,1.));
   return dist;
 }
 
@@ -93,14 +96,20 @@ vec3 get_normal(vec3 pos){
 }
 
 void main(){
-  vec3 view_dir=ray_dir(110.,vec2(1),v_uv);
+  vec3 view_dir=ray_dir(110.,iResolution,gl_FragCoord.xy);
   vec3 pos=cam_pos;
   
   mat3 view_to_world=view_matrix(pos,pos+cam_dir,vec3(0.,0.,1.));
   
   vec3 dir=view_to_world*view_dir;
+  vec3 rand_vec=vec3(
+    rand(gl_FragCoord.xy*123.23+time)-.5,
+    rand(gl_FragCoord.xy*13.87+time)-.5,
+    rand(gl_FragCoord.xy*97.51-time)-.5
+  );
+  dir=normalize(dir+rand_vec*.0001);
   
-  vec3 tcol=vec3(0.);
+  vec3 tcol=vec3(.0);
   vec3 fcol=vec3(1.);
   
   vec3 hit_pos=vec3(0);
@@ -109,24 +118,24 @@ void main(){
     float dist=sdf_scene(pos);
     pos+=dir*dist;
     
-    if(pos.z>3){
-      // tcol+=dir.y>.0?dir*.5+.5:vec3(0);
-      tcol+=dir*.5+.5;
-      break;
-    }
-    
     if(dist<EPSILON){
+      if(pos.z>3.){
+        // tcol+=dir.y>.0?dir*.5+.5:vec3(0);
+        // tcol+=dir*.5+.5;
+        tcol+=vec3(1);
+        break;
+      }
       if(hit_pos==vec3(0)){
         hit_pos=vec3(pos);
       }
-      fcol*=.9;
       vec3 normal=get_normal(pos);
+      // fcol*=normal*.5+.5;
+      fcol*=.9;
       float seed=rand(gl_FragCoord.xy/10.);
-      if(mod(seed+time,1.)<.9){
-        dir=cosine_direction(seed+13.829+time,normal);
-      }else{
-        dir=reflect(dir,normal);
-      }
+      vec3 diffuse=cosine_direction(seed+13.829+time,normal);
+      vec3 reflection=reflect(dir,normal);
+      // dir=mix(diffuse,reflection,mod(seed+time,1.));
+      dir=diffuse;
       pos+=normal*EPSILON*3;
     }
   }
@@ -134,7 +143,7 @@ void main(){
   mat3 old_view_to_world=view_matrix(cam_prev_pos,cam_prev_pos+cam_prev_dir,vec3(0.,0.,1.));
   vec3 old_dir=normalize(hit_pos-cam_prev_pos);
   vec3 old_view_dir=inverse(old_view_to_world)*old_dir;
-  vec2 old_uv=undo_ray_dir(110.,vec2(1),normalize(old_view_dir));
+  vec2 old_coord=undo_ray_dir(110.,iResolution,normalize(old_view_dir));
   
   pos=vec3(cam_prev_pos);
   dir=vec3(old_dir);
@@ -148,11 +157,17 @@ void main(){
     }
   }
   
-  vec3 hcol=texture(history,old_uv).rgb;
-  bool contained=old_uv.x>0.&&old_uv.x<1.&&old_uv.y>0.&&old_uv.y<1.;
-  if(distance(hit_pos,pos)<EPSILON&&contained){
-    frag=vec4(mix(tcol*fcol,hcol,.95),1);
+  vec4 texel=texture(history,old_coord/iResolution.xy).rgba;
+  vec3 hcol=texel.rgb;
+  bool contained=old_coord.x>0.&&old_coord.x<iResolution.x&&old_coord.y>0.&&old_coord.y<iResolution.y;
+  if(contained){
+    float mixture=min(1/(distance(hit_pos,pos)*1000.+1.04),texel.a);
+    float newalpha=min(mixture+.3,1.);
+    frag=vec4(mix(tcol*fcol,hcol,mixture)/newalpha,newalpha);
   }else{
-    frag=vec4(tcol*fcol,1);
+    frag=vec4((tcol*fcol)*10,.1);
+  }
+  if(gl_FragCoord.x<5&&gl_FragCoord.y<5&&gl_FragCoord.x>4&&gl_FragCoord.y>4){
+    frag=vec4(0,0,0,1);
   }
 }

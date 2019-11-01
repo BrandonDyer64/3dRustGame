@@ -72,7 +72,7 @@ fn main() {
     let mut forward = 0.;
     let mut right = 0.;
 
-    let speed = 2.;
+    let speed = 8.;
 
     'app: loop {
         frame_num += 1;
@@ -120,12 +120,14 @@ fn main() {
 
         camera.pos.y += camera.dir.y * time_delta as f32 * forward * speed;
         camera.pos.x += camera.dir.x * time_delta as f32 * forward * speed;
+        camera.pos.z += camera.dir.z * time_delta as f32 * forward * speed;
         camera.pos.y += camera.dir.x * time_delta as f32 * right * speed;
         camera.pos.x += -camera.dir.y * time_delta as f32 * right * speed;
 
+        let size = surface.size();
+
         if resize {
             back_buffer = surface.back_buffer().unwrap();
-            let size = surface.size();
             history_buffer_1 =
                 Framebuffer::new(&mut surface, size, 0).expect("framebuffer recreation");
             history_buffer_2 =
@@ -172,6 +174,10 @@ fn main() {
 
                 if let Ok(u) = query.ask("history") {
                     u.update(&bound_texture);
+                }
+
+                if let Ok(u) = query.ask("iResolution") {
+                    u.update([size[0] as f32, size[1] as f32]);
                 }
 
                 rdr_gate.render(render_state, |mut tess_gate| {

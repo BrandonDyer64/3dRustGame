@@ -42,22 +42,27 @@ vec4 smart_denoise(sampler2D tex,vec2 uv,float sigma,float kSigma,float threshol
 }
 
 void main(){
-  // vec3 truth=texture(frame,v_uv).rgb;
+  int area=1;
+  vec3 truth=texture(frame,v_uv).rgb;
   
-  // vec3 brightest=truth;
+  vec3 avg=vec3(0);
+  int avg_size=0;
   
-  // for(int y=-1;y<=1;y++){
-    //   for(int x=-1;x<=1;x++){
-      //     vec3 sample=textureOffset(frame,v_uv,ivec2(x,y)).rgb;
-      //     if(distance(truth,sample)<.2){
-        //       if(sample.r>brightest.r) brightest.r=sample.r;
-        //       if(sample.g>brightest.g) brightest.g=sample.g;
-        //       if(sample.b>brightest.b) brightest.b=sample.b;
-      //     }
-    //   }
-  // }
+  for(int y=-area;y<=area;y++){
+    for(int x=-area;x<=area;x++){
+      vec3 sample=textureOffset(frame,v_uv,ivec2(x,y)).rgb;
+      if(distance(truth,sample)<.2){
+        avg+=sample;
+        avg_size+=1;
+      }
+    }
+  }
   
-  // frag=vec4(brightest,1.);
+  avg/=avg_size;
+  
+  frag=vec4(mix(truth,avg,.5),1.);
   // frag=pow(frag,vec4(1./2.2));
-  frag=smart_denoise(frame,v_uv,3.,1.,.1);
+  // frag=vec4(smart_denoise(frame,v_uv,4.,2.,.1).rgb,1);
+  // frag=vec4(truth.rgb,1.);
+  // frag=vec4(vec3(truth.a),1.);
 }
