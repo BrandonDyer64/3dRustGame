@@ -13,8 +13,9 @@ uniform vec3 cam_prev_dir;
 
 uniform sampler2D history;
 
-#define STEPS 256
-#define EPSILON.001
+#define STEPS 128
+#define EPSILON.01
+#define MAX_BOUNCES 3
 
 float rand(vec2 co){
   return fract(sin(dot(co.xy,vec2(12.9898,78.233)))*43758.5453);
@@ -35,7 +36,7 @@ vec3 cosine_direction(in float seed,in vec3 nor){
   vec3 vv=vec3(kb,ks-nor.y*nor.y*ka*ks,-nor.y);
   
   float a=6.2831853*v;
-  return sqrt(u)*(cos(a)*uu+sin(a)*vv)+sqrt(1.-u)*nor;
+  return normalize(sqrt(u)*(cos(a)*uu+sin(a)*vv)+sqrt(1.-u)*nor);
 }
 
 vec3 ray_dir(float fieldOfView,vec2 size,vec2 fragCoord){
@@ -74,23 +75,40 @@ float sdf_ceil(vec3 p,float h){
   return h-p.z;
 }
 
-float sdf_scene(vec3 sample_point){
-  vec3 p=vec3(mod(sample_point.xy,5.)-3.,sample_point.z);
+bool is_block(ivec3 vox){
+  return mod(vox,3)==0;
+}
+
+float sdf_scene(vec3 p,vec3 dir){
   float dist=1.;
-  dist=min(dist,sdf_floor(p,-1.));
+  ivec3 d=ivec3(
+    dir.x>0?1:-1,
+    dir.y>0?1:-1,
+    dir.z>0?1:-1
+  );
+  ivec3 vox=ivec3(floor(p));
   dist=min(dist,sdf_ceil(p,4));
-  dist=min(dist,sdf_box(p,vec3(.5,.5,1.)));
-  dist=min(dist,sdf_sphere(p+vec3(1,0,.5),.5));
-  dist=max(dist,-sdf_sphere(sample_point-cam_pos,1.));
+  dist=min(dist,sdf_floor(p,-20));
+  for(int x=0;x<=1;x++){
+    for(int y=0;y<=1;y++){
+      for(int z=0;z<=1;z++){
+        ivec3 inner_vox=ivec3(x*d.x,y*d.y,z*d.z)+vox;
+        if(is_block(inner_vox)){
+          dist=min(dist,sdf_box(p-vec3(inner_vox)-.5,vec3(.5)));
+        }
+      }
+    }
+  }
+  dist=max(dist,-sdf_sphere(p-cam_pos,.2));
   return dist;
 }
 
-vec3 get_normal(vec3 pos){
+vec3 get_normal(vec3 pos,vec3 dir){
   return normalize(
     vec3(
-      sdf_scene(vec3(pos.x+EPSILON,pos.y,pos.z))-sdf_scene(vec3(pos.x-EPSILON,pos.y,pos.z)),
-      sdf_scene(vec3(pos.x,pos.y+EPSILON,pos.z))-sdf_scene(vec3(pos.x,pos.y-EPSILON,pos.z)),
-      sdf_scene(vec3(pos.x,pos.y,pos.z+EPSILON))-sdf_scene(vec3(pos.x,pos.y,pos.z-EPSILON))
+      sdf_scene(vec3(pos.x+EPSILON,pos.y,pos.z),dir)-sdf_scene(vec3(pos.x-EPSILON,pos.y,pos.z),dir),
+      sdf_scene(vec3(pos.x,pos.y+EPSILON,pos.z),dir)-sdf_scene(vec3(pos.x,pos.y-EPSILON,pos.z),dir),
+      sdf_scene(vec3(pos.x,pos.y,pos.z+EPSILON),dir)-sdf_scene(vec3(pos.x,pos.y,pos.z-EPSILON),dir)
     )
   );
 }
@@ -113,9 +131,10 @@ void main(){
   vec3 fcol=vec3(1.);
   
   vec3 hit_pos=vec3(0);
+  int bounces=0;
   
   for(int i=0;i<STEPS;i++){
-    float dist=sdf_scene(pos);
+    float dist=sdf_scene(pos,dir);
     pos+=dir*dist;
     
     if(dist<EPSILON){
@@ -128,14 +147,16 @@ void main(){
       if(hit_pos==vec3(0)){
         hit_pos=vec3(pos);
       }
-      vec3 normal=get_normal(pos);
+      if(bounces>MAX_BOUNCES)break;
+      bounces++;
+      vec3 normal=get_normal(pos,dir);
       // fcol*=normal*.5+.5;
-      fcol*=.9;
+      fcol*=.8;
       float seed=rand(gl_FragCoord.xy/10.);
       vec3 diffuse=cosine_direction(seed+13.829+time,normal);
       vec3 reflection=reflect(dir,normal);
-      // dir=mix(diffuse,reflection,mod(seed+time,1.));
-      dir=diffuse;
+      dir=normalize(mix(diffuse,reflection,.9));
+      // dir=diffuse;
       pos+=normal*EPSILON*3;
     }
   }
@@ -149,7 +170,7 @@ void main(){
   dir=vec3(old_dir);
   
   for(int i=0;i<STEPS;i++){
-    float dist=sdf_scene(pos);
+    float dist=sdf_scene(pos,dir);
     pos+=dir*dist;
     
     if(dist<EPSILON){
@@ -161,7 +182,7 @@ void main(){
   vec3 hcol=texel.rgb;
   bool contained=old_coord.x>0.&&old_coord.x<iResolution.x&&old_coord.y>0.&&old_coord.y<iResolution.y;
   if(contained){
-    float mixture=min(1/(distance(hit_pos,pos)*1000.+1.04),texel.a);
+    float mixture=min(1/(distance(hit_pos,pos)*100.+1.04),texel.a);
     float newalpha=min(mixture+.3,1.);
     frag=vec4(mix(tcol*fcol,hcol,mixture)/newalpha,newalpha);
   }else{
