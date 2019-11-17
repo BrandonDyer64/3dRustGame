@@ -13,8 +13,8 @@ uniform vec3 cam_prev_dir;
 
 uniform sampler2D history;
 
-#define STEPS 128
-#define EPSILON.01
+#define STEPS 1024
+#define EPSILON.0001
 #define MAX_BOUNCES 3
 
 float rand(vec2 co){
@@ -23,6 +23,12 @@ float rand(vec2 co){
 
 float hash(float seed){
   return fract(sin(seed)*43758.5453);
+}
+
+float noise(vec2 n) {
+  const vec2 d = vec2(0.0, 1.0);
+  vec2 b = floor(n), f = smoothstep(vec2(0.0), vec2(1.0), fract(n));
+  return mix(mix(rand(b), rand(b + d.yx), f.x), mix(rand(b + d.xy), rand(b + d.yy), f.x), f.y);
 }
 
 vec3 cosine_direction(in float seed,in vec3 nor){
@@ -76,7 +82,7 @@ float sdf_ceil(vec3 p,float h){
 }
 
 bool is_block(ivec3 vox){
-  return mod(vox,3)==0;
+  return noise(vox.xy*.05)>vox.z*.05+2;
 }
 
 float sdf_scene(vec3 p,vec3 dir){
@@ -88,12 +94,18 @@ float sdf_scene(vec3 p,vec3 dir){
   );
   ivec3 vox=ivec3(floor(p));
   dist=min(dist,sdf_ceil(p,4));
-  dist=min(dist,sdf_floor(p,-20));
+  //dist=min(dist,sdf_floor(p,-8));
+  int is_x=0;
+  int is_y=0;
+  int is_z=0;
   for(int x=0;x<=1;x++){
     for(int y=0;y<=1;y++){
       for(int z=0;z<=1;z++){
         ivec3 inner_vox=ivec3(x*d.x,y*d.y,z*d.z)+vox;
         if(is_block(inner_vox)){
+          is_x|=x;
+          is_y|=y;
+          is_z|=z;
           dist=min(dist,sdf_box(p-vec3(inner_vox)-.5,vec3(.5)));
         }
       }
@@ -131,13 +143,13 @@ void main(){
   vec3 fcol=vec3(1.);
   
   vec3 hit_pos=vec3(0);
-  int bounces=0;
+  int bounces=1;
   
   for(int i=0;i<STEPS;i++){
     float dist=sdf_scene(pos,dir);
     pos+=dir*dist;
     
-    if(dist<EPSILON){
+    if(dist<EPSILON*bounces){
       if(pos.z>3.){
         // tcol+=dir.y>.0?dir*.5+.5:vec3(0);
         // tcol+=dir*.5+.5;
@@ -155,7 +167,7 @@ void main(){
       float seed=rand(gl_FragCoord.xy/10.);
       vec3 diffuse=cosine_direction(seed+13.829+time,normal);
       vec3 reflection=reflect(dir,normal);
-      dir=normalize(mix(diffuse,reflection,.9));
+      dir=normalize(mix(reflection,diffuse,1.));
       // dir=diffuse;
       pos+=normal*EPSILON*3;
     }
