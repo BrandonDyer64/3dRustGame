@@ -13,9 +13,9 @@ uniform vec3 cam_prev_dir;
 
 uniform sampler2D history;
 
-#define STEPS 256
+#define STEPS 128
 #define EPSILON.001
-#define MAX_BOUNCES 1
+#define MAX_BOUNCES 3
 
 float rand(vec2 co){
   return fract(sin(dot(co.xy,vec2(12.9898,78.233)))*43758.5453);
@@ -180,7 +180,9 @@ float sdf_ceil(vec3 p,float h){
 bool is_block(ivec3 vox){
   if(vox.x<3.&&vox.x>-3&&vox.y<3&&vox.y>-3)return true;
   if(vox.x<20.&&vox.x>17&&vox.y<20&&vox.y>17)return false;
-  return snoise(vox*.05)>vox.z*.05+2;
+  // return snoise(vox*.05)>vox.z*.05+2;
+  vec2 fvox=sin(vox.xy*.1);
+  return fvox.x*fvox.y>vox.z*.05+2;
 }
 
 float sdf_scene(vec3 p,vec3 dir){
@@ -197,12 +199,12 @@ float sdf_scene(vec3 p,vec3 dir){
   for(int x=0;x<=1;x++){
     for(int y=0;y<=1;y++){
       for(int z=0;z<=1;z++){
-        ivec3 inner_vox=ivec3(x*d.x,y*d.y,z*d.z)+vox;
-        if(is_block(inner_vox)){
+        ivec3 checked_vox=ivec3(x*d.x,y*d.y,z*d.z)+vox;
+        if(is_block(checked_vox)){
           is_x|=x;
           is_y|=y;
           is_z|=z;
-          dist=min(dist,sdf_box(p-vec3(inner_vox)-.5,vec3(.5)));
+          dist=min(dist,sdf_box(p-vec3(checked_vox)-.5,vec3(.5)));
         }
       }
     }
@@ -223,17 +225,19 @@ vec3 get_normal(vec3 pos,vec3 dir){
 
 void main(){
   vec3 view_dir=ray_dir(110.,iResolution,gl_FragCoord.xy);
-  vec3 pos=cam_pos;
+  //float motion_blur_dist=rand(gl_FragCoord.xy*0.13247+time);
+  float motion_blur_dist=0;
+  vec3 pos=mix(cam_pos,cam_prev_pos,motion_blur_dist);
   
-  mat3 view_to_world=view_matrix(pos,pos+cam_dir,vec3(0.,0.,1.));
+  mat3 view_to_world=view_matrix(pos,pos+mix(cam_dir,cam_prev_dir,motion_blur_dist),vec3(0.,0.,1.));
   
   vec3 dir=view_to_world*view_dir;
-  vec3 rand_vec=vec3(
-    rand(gl_FragCoord.xy*123.23+time)-.5,
-    rand(gl_FragCoord.xy*13.87+time)-.5,
-    rand(gl_FragCoord.xy*97.51-time)-.5
-  );
-  dir=normalize(dir+rand_vec*.0001);
+  // vec3 rand_vec=vec3(
+  //   rand(gl_FragCoord.xy*123.23+time)-.5,
+  //   rand(gl_FragCoord.xy*13.87+time)-.5,
+  //   rand(gl_FragCoord.xy*97.51-time)-.5
+  // );
+  // dir=normalize(dir+rand_vec*.0001);
   
   vec3 tcol=vec3(.0);
   vec3 fcol=vec3(1.);
@@ -249,7 +253,7 @@ void main(){
     total_distance+=dist;
     pos+=dir*dist;
     
-    if(dist<EPSILON*bounces*(total_distance)){
+    if(dist<EPSILON*bounces){
       if(pos.z>3)break;
       if(pos.x<=4.&&pos.x>=-4&&pos.y<=4&&pos.y>=-4){
         do_sky=false;
@@ -271,16 +275,17 @@ void main(){
       }else{
         fcol*=vec3(.306,.204,.18);
       }
-      float seed=rand(gl_FragCoord.xy/10.);
+      //float seed=rand(gl_FragCoord.xy/10.);
+      float seed=rand(floor(pos.xy*16.)*time*floor(pos.z*16.));
       vec3 diffuse=cosine_direction(seed+13.829+time,normal);
       vec3 reflection=reflect(dir,normal);
-      dir=normalize(mix(reflection,diffuse,1));
+      dir=normalize(mix(reflection,diffuse,0.1));
       // dir=diffuse;
       pos+=normal*EPSILON*3;
     }
   }
   if(do_sky){
-    tcol+=vec3(.506,.831,.98)*.0;
+    tcol+=vec3(.506,.831,.98)*.8;
   }
   
   mat3 old_view_to_world=view_matrix(cam_prev_pos,cam_prev_pos+cam_prev_dir,vec3(0.,0.,1.));
@@ -300,14 +305,15 @@ void main(){
     }
   }
   if(i>=STEPS*.2){
-    pos=hit_pos;
+    pos=hit_pos+EPSILON;
   }
   
   vec4 texel=texture(history,old_coord/iResolution.xy).rgba;
   vec3 hcol=texel.rgb;
   bool contained=old_coord.x>0.&&old_coord.x<iResolution.x&&old_coord.y>0.&&old_coord.y<iResolution.y;
+  contained=contained&&floor(hit_pos.x)==floor(pos.x)&&floor(hit_pos.y)==floor(pos.y)&&floor(hit_pos.z)==floor(pos.z);
   if(contained){
-    float mixture=min(1/(distance(hit_pos,pos)*1.+1.04),texel.a);
+    float mixture=min(1/(distance(hit_pos,pos)*1.+1.05),texel.a);
     float newalpha=min(mixture+.3,1.);
     frag=vec4(mix(tcol*fcol,hcol,mixture)/newalpha,newalpha);
   }else{

@@ -20,9 +20,11 @@ const VS: &'static str = include_str!("shader.vert.glsl");
 const FS: &'static str = include_str!("shader.frag.glsl");
 const POST_FS: &'static str = include_str!("post.frag.glsl");
 
+const SCALE: u32 = 4;
+
 fn main() {
     let mut surface = GlfwSurface::new(
-        WindowDim::Windowed(1280, 1280),
+        WindowDim::Windowed(512, 256),
         "Hello, world!",
         WindowOpt::default().set_cursor_mode(CursorMode::Invisible),
     )
@@ -44,9 +46,9 @@ fn main() {
 
     let mut back_buffer = surface.back_buffer().unwrap();
     let size = surface.size();
-    let mut history_buffer_1 = Framebuffer::<Flat, Dim2, RGBA32F, ()>::new(&mut surface, size, 0)
+    let mut history_buffer_1 = Framebuffer::<Flat, Dim2, RGBA32F, ()>::new(&mut surface, [size[0] / SCALE, size[1] / SCALE], 0)
         .expect("framebuffer creation");
-    let mut history_buffer_2 = Framebuffer::<Flat, Dim2, RGBA32F, ()>::new(&mut surface, size, 0)
+    let mut history_buffer_2 = Framebuffer::<Flat, Dim2, RGBA32F, ()>::new(&mut surface, [size[0] / SCALE, size[1] / SCALE], 0)
         .expect("framebuffer creation");
     let render_state =
         RenderState::default().set_blending((Equation::Additive, Factor::SrcAlpha, Factor::Zero));
@@ -110,9 +112,9 @@ fn main() {
                 }
                 WindowEvent::FramebufferSize(..) => resize = true,
                 WindowEvent::CursorPos(x, y) => {
-                    camera.dir.x = (-x as f32 * 0.01).cos();
-                    camera.dir.y = (-x as f32 * 0.01).sin();
-                    camera.dir.z = (-y as f32 * 0.01) + 2.;
+                    camera.dir.x = (-x as f32 * 0.1).cos();
+                    camera.dir.y = (-x as f32 * 0.1).sin();
+                    camera.dir.z = (-y as f32 * 0.1) + 2.;
                 }
                 _ => (),
             }
@@ -129,9 +131,9 @@ fn main() {
         if resize {
             back_buffer = surface.back_buffer().unwrap();
             history_buffer_1 =
-                Framebuffer::new(&mut surface, size, 0).expect("framebuffer recreation");
+                Framebuffer::new(&mut surface, [size[0] / SCALE, size[1] / SCALE], 0).expect("framebuffer recreation");
             history_buffer_2 =
-                Framebuffer::new(&mut surface, size, 0).expect("framebuffer recreation");
+                Framebuffer::new(&mut surface, [size[0] / SCALE, size[1] / SCALE], 0).expect("framebuffer recreation");
         }
 
         let mut builder = surface.pipeline_builder();
@@ -177,7 +179,7 @@ fn main() {
                 }
 
                 if let Ok(u) = query.ask("iResolution") {
-                    u.update([size[0] as f32, size[1] as f32]);
+                    u.update([(size[0] / SCALE) as f32, (size[1] / SCALE) as f32]);
                 }
 
                 rdr_gate.render(render_state, |mut tess_gate| {
@@ -200,5 +202,6 @@ fn main() {
         });
 
         surface.swap_buffers();
+        std::thread::yield_now();
     }
 }
