@@ -1,6 +1,8 @@
 in vec2 v_uv;
 out vec4 frag;
 
+uniform int frame_num;
+
 uniform float time;
 uniform float delta;
 
@@ -224,7 +226,7 @@ vec3 get_normal(vec3 pos,vec3 dir){
 }
 
 void main(){
-  vec3 view_dir=ray_dir(110.,iResolution,gl_FragCoord.xy);
+  vec3 view_dir=ray_dir(110.,iResolution,gl_FragCoord.xy+rand(gl_FragCoord.xy*.1+time)-.5);
   //float motion_blur_dist=rand(gl_FragCoord.xy*0.13247+time);
   float motion_blur_dist=0;
   vec3 pos=mix(cam_pos,cam_prev_pos,motion_blur_dist);
@@ -276,10 +278,10 @@ void main(){
         fcol*=vec3(.306,.204,.18);
       }
       //float seed=rand(gl_FragCoord.xy/10.);
-      float seed=rand(floor(pos.xy*16.)*time*floor(pos.z*16.));
+      float seed=rand(floor(pos.xy*32.)*time*floor(pos.z*32.));
       vec3 diffuse=cosine_direction(seed+13.829+time,normal);
       vec3 reflection=reflect(dir,normal);
-      dir=normalize(mix(reflection,diffuse,0.1));
+      dir=normalize(mix(reflection,diffuse,1));
       // dir=diffuse;
       pos+=normal*EPSILON*3;
     }
@@ -311,7 +313,7 @@ void main(){
   vec4 texel=texture(history,old_coord/iResolution.xy).rgba;
   vec3 hcol=texel.rgb;
   bool contained=old_coord.x>0.&&old_coord.x<iResolution.x&&old_coord.y>0.&&old_coord.y<iResolution.y;
-  contained=contained&&floor(hit_pos.x)==floor(pos.x)&&floor(hit_pos.y)==floor(pos.y)&&floor(hit_pos.z)==floor(pos.z);
+  contained=contained&&floor(hit_pos.x*16.)==floor(pos.x*16.)&&floor(hit_pos.y*16.)==floor(pos.y*16.)&&floor(hit_pos.z*16.)==floor(pos.z*16.);
   if(contained){
     float mixture=min(1/(distance(hit_pos,pos)*1.+1.05),texel.a);
     float newalpha=min(mixture+.3,1.);

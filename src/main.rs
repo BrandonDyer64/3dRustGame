@@ -20,7 +20,7 @@ const VS: &'static str = include_str!("shader.vert.glsl");
 const FS: &'static str = include_str!("shader.frag.glsl");
 const POST_FS: &'static str = include_str!("post.frag.glsl");
 
-const SCALE: u32 = 4;
+const SCALE: u32 = 1;
 
 fn main() {
     let mut surface = GlfwSurface::new(
@@ -182,6 +182,10 @@ fn main() {
                     u.update([(size[0] / SCALE) as f32, (size[1] / SCALE) as f32]);
                 }
 
+                if let Ok(u) = query.ask("frame_num") {
+                    u.update(frame_num);
+                }
+
                 rdr_gate.render(render_state, |mut tess_gate| {
                     tess_gate.render(&tess);
                 });
@@ -189,11 +193,15 @@ fn main() {
         });
 
         builder.pipeline(&back_buffer, [0., 0., 0., 0.], |pipeline, mut shd_gate| {
-            let bound_texture = pipeline.bind_texture(back.color_slot());
+            let bound_back = pipeline.bind_texture(back.color_slot());
+            let bound_front = pipeline.bind_texture(front.color_slot());
             shd_gate.shade(&post_program, |iface, mut rdr_gate| {
                 let query = iface.query();
-                if let Ok(u_frame) = query.ask("frame") {
-                    u_frame.update(&bound_texture);
+                if let Ok(u) = query.ask("frame") {
+                    u.update(&bound_back);
+                }
+                if let Ok(u) = query.ask("last") {
+                    u.update(&bound_front);
                 }
                 rdr_gate.render(render_state, |mut tess_gate| {
                     tess_gate.render(&tess);
