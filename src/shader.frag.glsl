@@ -13,8 +13,8 @@ uniform vec3 cam_prev_dir;
 
 uniform sampler2D history;
 
-#define STEPS 256
-#define EPSILON.001
+#define STEPS 128
+#define EPSILON.01
 
 float rand(vec2 co){
   return fract(sin(dot(co.xy,vec2(12.9898,78.233)))*43758.5453);
@@ -74,14 +74,15 @@ float sdf_ceil(vec3 p,float h){
   return h-p.z;
 }
 
-float sdf_scene(vec3 sample_point){
-  vec3 p=vec3(mod(sample_point.xy,5.)-3.,sample_point.z);
+float sdf_scene(vec3 p){
+  //vec3 p=vec3(mod(sample_point.xy,5.)-3.,sample_point.z);
   float dist=1.;
   dist=min(dist,sdf_floor(p,-1.));
   dist=min(dist,sdf_ceil(p,4));
   dist=min(dist,sdf_box(p,vec3(.5,.5,1.)));
   dist=min(dist,sdf_sphere(p+vec3(1,0,.5),.5));
-  dist=max(dist,-sdf_sphere(sample_point-cam_pos,1.));
+  dist=min(dist,max(abs(p.x),abs(p.y)-2));
+  dist=max(dist,-sdf_sphere(p-cam_pos,1.));
   return dist;
 }
 
@@ -134,9 +135,15 @@ void main(){
       float seed=rand(gl_FragCoord.xy/10.);
       vec3 diffuse=cosine_direction(seed+13.829+time,normal);
       vec3 reflection=reflect(dir,normal);
-      // dir=mix(diffuse,reflection,mod(seed+time,1.));
-      dir=diffuse;
-      pos+=normal*EPSILON*3;
+      dir=reflection;
+      if (abs(pos.x)<EPSILON*2.) {
+        dir=mix(diffuse,reflection,0.9);
+        dir.x*=-1;
+        pos-=normal*EPSILON*3;
+      }else{
+        dir=mix(diffuse,reflection,0.2);
+        pos+=normal*EPSILON*3;
+      }
     }
   }
   
@@ -161,7 +168,7 @@ void main(){
   vec3 hcol=texel.rgb;
   bool contained=old_coord.x>0.&&old_coord.x<iResolution.x&&old_coord.y>0.&&old_coord.y<iResolution.y;
   if(contained){
-    float mixture=min(1/(distance(hit_pos,pos)*1000.+1.04),texel.a);
+    float mixture=min(1/(distance(hit_pos,pos)*1000.+1.08),texel.a);
     float newalpha=min(mixture+.3,1.);
     frag=vec4(mix(tcol*fcol,hcol,mixture)/newalpha,newalpha);
   }else{

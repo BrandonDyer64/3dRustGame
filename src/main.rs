@@ -22,7 +22,7 @@ const POST_FS: &'static str = include_str!("post.frag.glsl");
 
 fn main() {
     let mut surface = GlfwSurface::new(
-        WindowDim::Windowed(1280, 1280),
+        WindowDim::Windowed(400, 200),
         "Hello, world!",
         WindowOpt::default().set_cursor_mode(CursorMode::Invisible),
     )
@@ -110,9 +110,9 @@ fn main() {
                 }
                 WindowEvent::FramebufferSize(..) => resize = true,
                 WindowEvent::CursorPos(x, y) => {
-                    camera.dir.x = (-x as f32 * 0.01).cos();
-                    camera.dir.y = (-x as f32 * 0.01).sin();
-                    camera.dir.z = (-y as f32 * 0.01) + 2.;
+                    camera.dir.x = (-x as f32 * 0.1).cos();
+                    camera.dir.y = (-x as f32 * 0.1).sin();
+                    camera.dir.z = (-y as f32 * 0.1) + 2.;
                 }
                 _ => (),
             }
