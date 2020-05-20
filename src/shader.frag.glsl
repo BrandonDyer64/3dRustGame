@@ -20,6 +20,16 @@ float rand(vec2 co){
   return fract(sin(dot(co.xy,vec2(12.9898,78.233)))*43758.5453);
 }
 
+vec3 randomize(vec3 v, float size) {
+  return v
+    + vec3(
+      rand(gl_FragCoord.xy*.1+time)-.5,
+      rand(gl_FragCoord.xy*.11+time)-.5,
+      rand(gl_FragCoord.xy*.11-time)-.5
+    )
+    * size;
+}
+
 float hash(float seed){
   return fract(sin(seed)*43758.5453);
 }
@@ -118,6 +128,7 @@ void main(){
   for(int i=0;i<STEPS;i++){
     float dist=sdf_scene(pos);
     pos+=dir*dist;
+    fcol*=.99;
     
     if(dist<EPSILON){
       if(pos.z>3.){
@@ -135,10 +146,10 @@ void main(){
       float seed=rand(gl_FragCoord.xy/10.);
       vec3 diffuse=cosine_direction(seed+13.829+time,normal);
       vec3 reflection=reflect(dir,normal);
-      dir=reflection;
+      //dir=reflection;
       if (abs(pos.x)<EPSILON*2.) {
-        dir=mix(diffuse,reflection,0.9);
-        dir.x*=-1;
+        dir=normalize(randomize(dir,.2));
+        //dir.x*=-1;
         pos-=normal*EPSILON*3;
       }else{
         dir=mix(diffuse,reflection,0.2);
@@ -168,13 +179,10 @@ void main(){
   vec3 hcol=texel.rgb;
   bool contained=old_coord.x>0.&&old_coord.x<iResolution.x&&old_coord.y>0.&&old_coord.y<iResolution.y;
   if(contained){
-    float mixture=min(1/(distance(hit_pos,pos)*1000.+1.08),texel.a);
+    float mixture=min(1/(distance(hit_pos,pos)*100000.+1.01),texel.a);
     float newalpha=min(mixture+.3,1.);
     frag=vec4(mix(tcol*fcol,hcol,mixture)/newalpha,newalpha);
   }else{
     frag=vec4((tcol*fcol)*10,.1);
-  }
-  if(gl_FragCoord.x<5&&gl_FragCoord.y<5&&gl_FragCoord.x>4&&gl_FragCoord.y>4){
-    frag=vec4(0,0,0,1);
   }
 }
