@@ -37,13 +37,13 @@ float hash(float seed){
 vec3 cosine_direction(in float seed,in vec3 nor){
   float u=hash(78.233+seed);
   float v=hash(10.873+seed);
-  
+
   float ks=(nor.z>=0.)?1.:-1.;//do not use sign(nor.z), it can produce 0.0
   float ka=1./(1.+abs(nor.z));
   float kb=-ks*nor.x*nor.y*ka;
   vec3 uu=vec3(1.-nor.x*nor.x*ka,ks*kb,-ks*nor.x);
   vec3 vv=vec3(kb,ks-nor.y*nor.y*ka*ks,-nor.y);
-  
+
   float a=6.2831853*v;
   return sqrt(u)*(cos(a)*uu+sin(a)*vv)+sqrt(1.-u)*nor;
 }
@@ -109,9 +109,9 @@ vec3 get_normal(vec3 pos){
 void main(){
   vec3 view_dir=ray_dir(110.,iResolution,gl_FragCoord.xy);
   vec3 pos=cam_pos;
-  
+
   mat3 view_to_world=view_matrix(pos,pos+cam_dir,vec3(0.,0.,1.));
-  
+
   vec3 dir=view_to_world*view_dir;
   vec3 rand_vec=vec3(
     rand(gl_FragCoord.xy*123.23+time)-.5,
@@ -119,17 +119,17 @@ void main(){
     rand(gl_FragCoord.xy*97.51-time)-.5
   );
   dir=normalize(dir+rand_vec*.0001);
-  
+
   vec3 tcol=vec3(.0);
   vec3 fcol=vec3(1.);
-  
+
   vec3 hit_pos=vec3(0);
-  
+
   for(int i=0;i<STEPS;i++){
     float dist=sdf_scene(pos);
     pos+=dir*dist;
     fcol*=.99;
-    
+
     if(dist<EPSILON){
       if(pos.z>3.){
         // tcol+=dir.y>.0?dir*.5+.5:vec3(0);
@@ -147,34 +147,37 @@ void main(){
       vec3 diffuse=cosine_direction(seed+13.829+time,normal);
       vec3 reflection=reflect(dir,normal);
       //dir=reflection;
-      if (abs(pos.x)<EPSILON*2.) {
-        dir=normalize(randomize(dir,.2));
+      if (abs(pos.x)<0.05-EPSILON) {
+        vec3 newdir=refract(dir, normal, 0.666);
+        if (newdir!=vec3(0.0)) {
+          dir = newdir;
+        }
         //dir.x*=-1;
-        pos-=normal*EPSILON*3;
+        pos-=normal*(EPSILON*3+dist);
       }else{
         dir=mix(diffuse,reflection,0.2);
-        pos+=normal*EPSILON*3;
+        pos+=normal*(EPSILON*3-dist);
       }
     }
   }
-  
+
   mat3 old_view_to_world=view_matrix(cam_prev_pos,cam_prev_pos+cam_prev_dir,vec3(0.,0.,1.));
   vec3 old_dir=normalize(hit_pos-cam_prev_pos);
   vec3 old_view_dir=inverse(old_view_to_world)*old_dir;
   vec2 old_coord=undo_ray_dir(110.,iResolution,normalize(old_view_dir));
-  
+
   pos=vec3(cam_prev_pos);
   dir=vec3(old_dir);
-  
+
   for(int i=0;i<STEPS;i++){
     float dist=sdf_scene(pos);
     pos+=dir*dist;
-    
+
     if(dist<EPSILON){
       break;
     }
   }
-  
+
   vec4 texel=texture(history,old_coord/iResolution.xy).rgba;
   vec3 hcol=texel.rgb;
   bool contained=old_coord.x>0.&&old_coord.x<iResolution.x&&old_coord.y>0.&&old_coord.y<iResolution.y;
